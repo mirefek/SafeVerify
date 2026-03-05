@@ -28,12 +28,12 @@ unsafe
 def withCache {α : Type}
     (getHM : State → Std.HashMap USize α)
     (insert : USize → α → State → State)
-    (objKey : α) (mk : M α) : M α := do
+    (objKey : α) (mk : Unit → M α) : M α := do
   let key := ptrAddrUnsafe objKey
   match (getHM (← get)).get? key with
   | some x => return x
   | none =>
-    let res ← mk
+    let res ← mk ()
     modify (insert key res)
     return res
 
@@ -79,36 +79,40 @@ end DeepCopy
 
 open DeepCopy
 
-def Bool.deepCopy : Bool → Bool
-| true => true
-| false => false
+@[noinline] def theFalse := true
+@[noinline] def theTrue := true
+
+def Bool.deepCopy (b : Bool) : Bool :=
+  match b with
+  | false => theFalse
+  | true => theTrue
 
 unsafe
 def String.deepCopy (s : String) : M String :=
-  withCacheStr s <| return ofList s.toList
+  withCacheStr s fun _ ↦ return ofList s.toList
 
 unsafe
 def Nat.deepCopy (n : Nat) : M Nat :=
-  withCacheNat n <| match n.repr.toNat? with
+  withCacheNat n <| fun _ ↦ match n.repr.toNat? with
   | none => return 0
   | some x => return x
 
 unsafe
 def Int.deepCopy (n : Int) : M Int :=
-  withCacheInt n <| match n with
+  withCacheInt n <| fun _ ↦ match n with
   | .ofNat n => .ofNat <$> n.deepCopy
   | .negSucc n => .negSucc <$> n.deepCopy
 
 unsafe
 def Lean.Name.deepCopy (name : Name) : M Name :=
-  withCacheName name <| match name with
+  withCacheName name fun _ ↦ match name with
   | anonymous => return anonymous
   | str name s => return str (← name.deepCopy) (← s.deepCopy)
   | num name n => return num (← name.deepCopy) (← n.deepCopy)
 
 unsafe
 def Lean.Import.deepCopy (i : Import) : M Import :=
-  withCacheImport i <| return {
+  withCacheImport i fun _ ↦ return {
     «module» := ← i.«module».deepCopy
     importAll := i.importAll.deepCopy
     isExported : Bool := i.isExported.deepCopy
@@ -116,15 +120,15 @@ def Lean.Import.deepCopy (i : Import) : M Import :=
 
 unsafe
 def Lean.FVarId.deepCopy (fvar : FVarId) : M FVarId :=
-  withCacheFvar fvar <| return {
+  withCacheFvar fvar fun _ ↦ return {
     name := ← fvar.name.deepCopy }
 unsafe
 def Lean.MVarId.deepCopy (mvar : MVarId) : M MVarId :=
-  withCacheMvar mvar <| return {
+  withCacheMvar mvar fun _ ↦ return {
     name := ← mvar.name.deepCopy }
 unsafe
 def Lean.LMVarId.deepCopy (lmvar : LMVarId) : M LMVarId :=
-  withCacheLMvar lmvar <| return {
+  withCacheLMvar lmvar fun _ ↦ return {
     name := ← lmvar.name.deepCopy }
 def Lean.BinderInfo.deepCopy : BinderInfo → BinderInfo
 | default => default
@@ -133,7 +137,7 @@ def Lean.BinderInfo.deepCopy : BinderInfo → BinderInfo
 | instImplicit => instImplicit
 unsafe
 def Lean.Level.deepCopy (l : Level) : M Level :=
-  withCacheLevel l <| match l with
+  withCacheLevel l fun _ ↦ match l with
   | zero => return zero
   | succ l => return succ (← l.deepCopy)
   | max a b => return max (← a.deepCopy) (← b.deepCopy)
@@ -142,7 +146,7 @@ def Lean.Level.deepCopy (l : Level) : M Level :=
   | mvar v => return mvar (← v.deepCopy)
 unsafe
 def Lean.Literal.deepCopy (l : Literal) : M Literal :=
-  withCacheLit l <| match l with
+  withCacheLit l fun _ ↦ match l with
   | natVal val => natVal <$> val.deepCopy
   | strVal val => strVal <$> val.deepCopy
 
@@ -156,7 +160,7 @@ def Substring.Raw.deepCopy (s : Raw) : M Raw := return {
   stopPos := ← s.startPos.deepCopy }
 unsafe
 def Lean.SourceInfo.deepCopy (si : SourceInfo) : M SourceInfo :=
-  withCacheSourceInfo si <| match si with
+  withCacheSourceInfo si fun _ ↦ match si with
   | .original leading pos trailing endPos =>
     return .original (← leading.deepCopy)
       (← pos.deepCopy) (← trailing.deepCopy) (← endPos.deepCopy)
@@ -166,12 +170,12 @@ def Lean.SourceInfo.deepCopy (si : SourceInfo) : M SourceInfo :=
   | .none => return .none
 unsafe
 def Lean.Syntax.Preresolved.deepCopy (p : Preresolved) : M Preresolved :=
-  withCachePreresolved p <| match p with
+  withCachePreresolved p fun _ ↦ match p with
   | «namespace» ns => return «namespace» (← ns.deepCopy)
   | decl n fields => return decl (← n.deepCopy) (← fields.mapM String.deepCopy)
 unsafe
 def Lean.Syntax.deepCopy (stx : Syntax) : M Syntax :=
-  withCacheSyntax stx <| match stx with
+  withCacheSyntax stx fun _ ↦ match stx with
   | missing => return missing
   | node info kind args =>
     return node (← info.deepCopy)
@@ -182,7 +186,7 @@ def Lean.Syntax.deepCopy (stx : Syntax) : M Syntax :=
       (← val.deepCopy) (← preresolved.mapM Preresolved.deepCopy)
 unsafe
 def Lean.DataValue.deepCopy (dv : DataValue) : M DataValue :=
-  withCacheDataValue dv <| match dv with
+  withCacheDataValue dv fun _ ↦ match dv with
   | ofString v => return ofString (← v.deepCopy)
   | ofBool v => return ofBool v.deepCopy
   | ofName v => return ofName (← v.deepCopy)
@@ -191,13 +195,13 @@ def Lean.DataValue.deepCopy (dv : DataValue) : M DataValue :=
   | ofSyntax v => return ofSyntax (← v.deepCopy)
 unsafe
 def Lean.MData.deepCopy (m : MData) : M MData :=
-  withCacheMdata m <| return {
+  withCacheMdata m fun _ ↦ return {
   entries := ← m.entries.mapM (fun (name, value) ↦
     return (← name.deepCopy, ← value.deepCopy) ) }
 
 unsafe
 def Lean.Expr.deepCopy (e : Expr) : M Expr :=
-  withCacheExpr e <| match e with
+  withCacheExpr e fun _ ↦ match e with
   | bvar deBruijnIndex => return bvar (← deBruijnIndex.deepCopy)
   | fvar fvarId => return fvar (← fvarId.deepCopy)
   | mvar mvarId => return mvar (← mvarId.deepCopy)
