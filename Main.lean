@@ -5,6 +5,7 @@ https://github.com/kim-em/lean-training-data/blob/master/scripts/declaration_typ
 -/
 
 import SafeVerify
+import SafeVerify.DeepCopy
 import Lean
 import Cli
 
@@ -56,11 +57,14 @@ def checkTargets (targetInfos submissionInfos : HashMap Name Info) : HashMap Nam
 
 /-- Replays a lean file and outputs a hashmap storing the `Info`s corresponding to
 the theorems and definitions in the file. -/
-def replayFile (filePath : System.FilePath) (disallowPartial : Bool) : IO (HashMap Name Info) := do
+def replayFile (filePath : System.FilePath) (disallowPartial : Bool) (sanitize : Bool) : IO (HashMap Name Info) := do
   IO.println s!"Replaying {filePath}"
   unless (← filePath.pathExists) do
     throw <| IO.userError s!"object file '{filePath}' does not exist"
   let (mod, _) ← readModuleData filePath
+  let mod :=
+    if sanitize then mod.deepCopy
+    else mod
   let env ← importModules mod.imports {} 0
   IO.println "Finished setting up the environement."
   let mut newConstants := {}
@@ -119,9 +123,9 @@ submission file containing proofs). -/
 def runSafeVerify (targetFile submissionFile : System.FilePath)
     (disallowPartial : Bool) (verbose : Bool := false) : IO (HashMap Name SafeVerifyOutcome) := do
   IO.println "------------------"
-  let targetInfo ← replayFile targetFile disallowPartial
+  let targetInfo ← replayFile targetFile disallowPartial (sanitize := false)
   IO.println "------------------"
-  let submissionInfo ← replayFile submissionFile disallowPartial
+  let submissionInfo ← replayFile submissionFile disallowPartial (sanitize := true)
   for (n, info) in submissionInfo do
     if !checkAxioms info then
       throw <| IO.userError s!"{n} used disallowed axioms. {info.axioms}"
