@@ -79,7 +79,7 @@ end DeepCopy
 
 open DeepCopy
 
-@[noinline] def theFalse := true
+@[noinline] def theFalse := false
 @[noinline] def theTrue := true
 
 def Bool.deepCopy (b : Bool) : Bool :=
